@@ -240,6 +240,8 @@ def test_webnovel_review_skill_uses_unified_reviewer_pipeline():
     skill_text = _read_text(SKILLS_DIR / "webnovel-review" / "SKILL.md")
 
     assert "`reviewer`" in skill_text
+    assert "Agent(" in skill_text
+    assert 'subagent_type: "webnovel-writer:reviewer"' in skill_text
     assert "review-pipeline" in skill_text
     assert ".webnovel/tmp/review_results.json" in skill_text
     assert ".webnovel/tmp/review_metrics.json" in skill_text
@@ -255,6 +257,29 @@ def test_webnovel_review_skill_uses_unified_reviewer_pipeline():
         assert legacy_agent not in skill_text
 
     assert " workflow " not in skill_text
+
+
+def test_active_skills_use_agent_tool_name_not_legacy_task():
+    """Claude Code 2.1.63+ 将 Task 工具改名为 Agent；active skills 不应再声明 Task。"""
+    for skill_file in SKILL_FILES:
+        text = _read_text(skill_file)
+        fm = _extract_frontmatter(text)
+        allowed_tools = fm.get("allowed-tools", "")
+        assert "Task" not in allowed_tools, f"{skill_file.parent.name}: allowed-tools 仍声明 Task"
+        assert "Task 调用" not in text, f"{skill_file.parent.name}: 仍使用软性的 Task 调用描述"
+        assert "必须通过 `Task`" not in text, f"{skill_file.parent.name}: 仍要求旧 Task 工具名"
+
+
+def test_webnovel_write_skill_uses_explicit_agent_invocation_templates():
+    """webnovel-write 的关键 subagent 必须用显式 Agent(subagent_type=...) 调用模板。"""
+    text = _read_text(SKILLS_DIR / "webnovel-write" / "SKILL.md")
+    fm = _extract_frontmatter(text)
+
+    assert "Agent" in fm.get("allowed-tools", "")
+    for subagent in ("context-agent", "reviewer", "data-agent"):
+        assert f'subagent_type: "webnovel-writer:{subagent}"' in text
+        assert f'subagent_type: "{subagent}"' not in text
+    assert "不得用主流程口头代替 subagent 输出" in text
 
 
 def test_story_system_runtime_contract_commands_exist():

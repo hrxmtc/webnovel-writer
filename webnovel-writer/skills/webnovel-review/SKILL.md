@@ -1,7 +1,7 @@
 ---
 name: webnovel-review
 description: 使用审查 Agent 评估章节质量，生成报告并写回审查指标。
-allowed-tools: Read Grep Write Edit Bash Task AskUserQuestion
+allowed-tools: Read Grep Write Edit Bash Agent AskUserQuestion
 ---
 
 # Quality Review Skill
@@ -91,7 +91,14 @@ cat "${PROJECT_ROOT}/.webnovel/state.json"
 
 ### Step 4：调用统一审查 Agent
 
-必须通过 `Task` 调用 `reviewer`，禁止主流程伪造结论。
+必须通过 `Agent` 工具调用 `reviewer`，禁止主流程伪造结论或口头总结代替 subagent 输出。
+
+```text
+Agent(
+  subagent_type: "webnovel-writer:reviewer",
+  prompt: "chapter={chapter_num}; chapter_file={chapter_file}; project_root=${PROJECT_ROOT}; scripts_dir=${SCRIPTS_DIR}。严格输出 reviewer schema JSON，并保存到 ${PROJECT_ROOT}/.webnovel/tmp/review_results.json。"
+)
+```
 
 输入：
 - `chapter`

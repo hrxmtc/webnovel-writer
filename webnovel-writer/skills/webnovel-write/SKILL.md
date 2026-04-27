@@ -1,7 +1,7 @@
 ---
 name: webnovel-write
 description: 产出可发布章节，完整执行上下文→起草→审查→润色→提交→备份。
-allowed-tools: Read Write Edit Grep Bash Task
+allowed-tools: Read Write Edit Grep Bash Agent
 ---
 
 # 写章流程
@@ -21,6 +21,7 @@ allowed-tools: Read Write Edit Grep Bash Task
 ## 硬规则
 
 - 禁止并步、跳步、伪造审查
+- 必须使用 `Agent` 工具调用指定 subagent；不得用主流程口头代替 subagent 输出
 - blocking issue 未解决不进 Step 4/5
 - 失败只补跑失败步骤，不回退
 - 参考资料按步骤按需加载
@@ -67,7 +68,14 @@ python -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${WORKSPACE_ROOT}" \
 
 ### Step 1：context-agent 生成写作任务书
 
-Task 调用 `context-agent`，传入 chapter/project_root/storage_path/state_file。
+必须使用 `Agent` 工具调用 `context-agent`，不得由主流程自行整理任务书。
+
+```text
+Agent(
+  subagent_type: "webnovel-writer:context-agent",
+  prompt: "chapter={chapter_num}; project_root=${PROJECT_ROOT}; scripts_dir=${SCRIPTS_DIR}; storage_path=${PROJECT_ROOT}/.webnovel; state_file=${PROJECT_ROOT}/.webnovel/state.json。先 research，再输出五段写作任务书。"
+)
+```
 
 产物：一份写作任务书，能独立支撑 Step 2 起草。
 
@@ -77,7 +85,14 @@ Task 调用 `context-agent`，传入 chapter/project_root/storage_path/state_fil
 
 ### Step 3：审查
 
-Task 调用 `reviewer`，传入 chapter/chapter_file/project_root/scripts_dir。
+必须使用 `Agent` 工具调用 `reviewer`，不得由主流程伪造审查 JSON。
+
+```text
+Agent(
+  subagent_type: "webnovel-writer:reviewer",
+  prompt: "chapter={chapter_num}; chapter_file=${CHAPTER_FILE}; project_root=${PROJECT_ROOT}; scripts_dir=${SCRIPTS_DIR}。严格输出 reviewer schema JSON，并保存到 ${PROJECT_ROOT}/.webnovel/tmp/review_results.json。"
+)
+```
 
 ```bash
 python -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" review-pipeline \
@@ -102,7 +117,14 @@ blocking=true → 修复后重审，不进 Step 4。`--fast` 只检查 setting/t
 
 #### 5.1 Data Agent 提取事实
 
-Task 调用 `data-agent`，产出 review_results / fulfillment_result / disambiguation_result / extraction_result 四份 JSON。
+必须使用 `Agent` 工具调用 `data-agent`，产出 fulfillment_result / disambiguation_result / extraction_result 三份 JSON，并复用 Step 3 的 review_results。
+
+```text
+Agent(
+  subagent_type: "webnovel-writer:data-agent",
+  prompt: "chapter={chapter_num}; chapter_file=${CHAPTER_FILE}; project_root=${PROJECT_ROOT}; scripts_dir=${SCRIPTS_DIR}。从正文提取事实，生成 .webnovel/tmp/ 下的 fulfillment_result.json、disambiguation_result.json、extraction_result.json；不直接写 state/index/summaries/memory。"
+)
+```
 
 Data Agent 只提取事实+生成 artifacts，不直接写 state/index/summaries/memory。
 
