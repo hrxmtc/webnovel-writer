@@ -86,8 +86,8 @@ export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT}/scripts"
 - 解析脚本目录并确认入口存在（仅支持插件目录）：
   - 固定路径：`${CLAUDE_PLUGIN_ROOT}/scripts`
   - 入口脚本：`${SCRIPTS_DIR}/webnovel.py`
-- 建议先打印解析结果，避免写到错误目录：
-  - `python "${SCRIPTS_DIR}/webnovel.py" --project-root "${WORKSPACE_ROOT}" where`
+- 初始化前不要用 `where` 把 `WORKSPACE_ROOT` 解析成书项目根；新项目尚不存在时，`where` 可能命中旧指针或旧项目。
+- 只打印工作区与脚本目录，确认生成目标将在工作区下的书名安全化子目录中。
 - 加载最小参考：
   - `references/system-data-flow.md`（用于校对 init 产物与 plan/write 输入链路）
   - `references/genre-tropes.md`
@@ -269,8 +269,24 @@ export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT}/scripts"
 ## 项目目录安全规则（必须）
 
 - `project_root` 必须由书名安全化生成（去非法字符，空格转 `-`）。
+- 构造公式：`project_root = <当前工作目录>/<书名安全化结果>`，即 `PROJECT_ROOT="${WORKSPACE_ROOT}/${PROJECT_SLUG}"`。
 - 若安全化结果为空或以 `.` 开头，自动前缀 `proj-`。
 - 禁止在插件目录下生成项目文件（`${CLAUDE_PLUGIN_ROOT}`）。
+- 禁止直接把 `WORKSPACE_ROOT` 当作 `PROJECT_ROOT`，除非用户明确指定当前目录本身就是书项目根。
+- 初始化前必须展示并确认：
+  - `WORKSPACE_ROOT`
+  - `PROJECT_SLUG`
+  - `PROJECT_ROOT`
+
+推荐安全化命令（与规则保持一致）：
+
+```bash
+PROJECT_SLUG="$(python -X utf8 -c "import re,sys; title=sys.argv[1].strip(); slug=re.sub(r'[\\\\/:*?\"<>|]+','',title); slug=re.sub(r'\\s+','-',slug).strip('-'); print(('proj-' + slug) if (not slug or slug.startswith('.')) else slug)" "{title}")"
+PROJECT_ROOT="${WORKSPACE_ROOT}/${PROJECT_SLUG}"
+echo "WORKSPACE_ROOT=${WORKSPACE_ROOT}"
+echo "PROJECT_SLUG=${PROJECT_SLUG}"
+echo "PROJECT_ROOT=${PROJECT_ROOT}"
+```
 
 ## 执行生成
 
@@ -278,7 +294,7 @@ export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT}/scripts"
 
 ```bash
 python "${SCRIPTS_DIR}/webnovel.py" init \
-  "{project_root}" \
+  "${PROJECT_ROOT}" \
   "{title}" \
   "{genre}" \
   --protagonist-name "{protagonist_name}" \
@@ -351,9 +367,9 @@ python "${SCRIPTS_DIR}/webnovel.py" init \
 init 完成后，立即生成 MASTER_SETTING，让后续 plan 有调性/禁忌参照：
 
 ```bash
-GENRE="$(python -X utf8 -c "import json; s=json.load(open('{project_root}/.webnovel/state.json',encoding='utf-8')); print(s.get('project',{}).get('genre',''))")"
+GENRE="$(python -X utf8 -c "import json,os; root=os.environ['PROJECT_ROOT']; s=json.load(open(root + '/.webnovel/state.json',encoding='utf-8')); print(s.get('project',{}).get('genre',''))")"
 
-python -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "{project_root}" \
+python -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" \
   story-system "${GENRE}" --genre "${GENRE}" --persist --format json
 ```
 
@@ -367,11 +383,12 @@ python -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "{project_root}" \
 执行检查：
 
 ```bash
-test -f "{project_root}/.webnovel/state.json"
-find "{project_root}/设定集" -maxdepth 1 -type f -name "*.md"
-test -f "{project_root}/大纲/总纲.md"
-test -f "{project_root}/.webnovel/idea_bank.json"
-test -f "{project_root}/.story-system/MASTER_SETTING.json"
+test -f "${PROJECT_ROOT}/.webnovel/state.json"
+find "${PROJECT_ROOT}/设定集" -maxdepth 1 -type f -name "*.md"
+test -f "${PROJECT_ROOT}/大纲/总纲.md"
+test -f "${PROJECT_ROOT}/.webnovel/idea_bank.json"
+test -f "${PROJECT_ROOT}/.story-system/MASTER_SETTING.json"
+test "$(basename "${PROJECT_ROOT}")" = "${PROJECT_SLUG}"
 ```
 
 成功标准：
